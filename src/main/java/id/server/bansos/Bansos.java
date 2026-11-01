@@ -16,7 +16,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
@@ -31,13 +30,15 @@ import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 public final class Bansos extends JavaPlugin implements Listener {
 
-    private static final long ONLINE_REQUIRED = 10800L;
-    private static final long COOLDOWN = 259200L;
-
     private final Map<UUID, PlayerData> data = new HashMap<>();
 
     private File dataFile;
     private YamlConfiguration dataConfig;
+
+    private long onlineRequired;
+    private long cooldown;
+    private long saveInterval;
+
     private long saveCounter = 0L;
 
     private static final LegacyComponentSerializer LEGACY =
@@ -54,10 +55,11 @@ public final class Bansos extends JavaPlugin implements Listener {
     }
 
     private static class BansosMenu implements InventoryHolder {
+
         private final Inventory inventory;
 
-        BansosMenu(Inventory inventory) {
-            this.inventory = inventory;
+        BansosMenu(int size, Component title) {
+            this.inventory = Bukkit.createInventory(this, size, title);
         }
 
         @Override
@@ -68,7 +70,29 @@ public final class Bansos extends JavaPlugin implements Listener {
 
     @Override
     public void onEnable() {
+
         saveDefaultConfig();
+
+        onlineRequired = Math.max(
+            1L,
+            getConfig().getLong("settings.online-required-seconds", 10800L)
+        );
+
+        cooldown = Math.max(
+            0L,
+            getConfig().getLong("settings.cooldown-seconds", 259200L)
+        );
+
+        saveInterval = Math.max(
+            1L,
+            getConfig().getLong("settings.save-interval-seconds", 60L)
+        );
+
+        if (getCommand("bantuan") == null) {
+            getLogger().severe("Command bantuan tidak ditemukan di plugin.yml!");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
 
         dataFile = new File(getDataFolder(), "data.yml");
 
@@ -80,68 +104,122 @@ public final class Bansos extends JavaPlugin implements Listener {
 
         Bukkit.getPluginManager().registerEvents(this, this);
 
-        getCommand("bansos").setExecutor((sender, command, label, args) -> {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage("Command ini hanya untuk pemain.");
-                return true;
-            }
+        getCommand("bantuan").setExecutor((sender, command, label, args) -> {
 
-            if (args.length == 1 && args[0].equalsIgnoreCase("claim")) {
+            if (args.length == 1 &&
+                    args[0].equalsIgnoreCase("terima")) {
+
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage("Command ini hanya untuk pemain.");
+                    return true;
+                }
+
                 openMenu(player);
-            } else {
-                player.sendMessage("§eGunakan /bansos claim");
-            }
-
-            return true;
-        });
-
-        getCommand("timer").setExecutor((sender, command, label, args) -> {
-            if (!(sender instanceof Player player)) {
-                sender.sendMessage("Command ini hanya untuk pemain.");
                 return true;
             }
 
-            if (args.length == 1 && args[0].equalsIgnoreCase("bansos")) {
+            if (args.length == 1 &&
+                    args[0].equalsIgnoreCase("timer")) {
+
+                if (!(sender instanceof Player player)) {
+                    sender.sendMessage("Command ini hanya untuk pemain.");
+                    return true;
+                }
+
                 showTimer(player);
-            } else {
-                player.sendMessage("§eGunakan /timer bansos");
+                return true;
+            }
+
+            if (args.length == 2 &&
+                    args[0].equalsIgnoreCase("clear")) {
+
+                if (!sender.hasPermission("bansos.admin")) {
+                    sender.sendMessage("§cKamu tidak memiliki izin!");
+                    return true;
+                }
+
+                Player target = Bukkit.getPlayerExact(args[1]);
+
+                if (target == null) {
+                    sender.sendMessage(
+                        "§cPemain tidak ditemukan atau sedang offline!"
+                    );
+                    return true;
+                }
+
+                PlayerData pd = getData(target);
+
+                pd.onlineSeconds = onlineRequired;
+
+                saveData();
+
+                sender.sendMessage(
+                    "§aProgres bansos " + target.getName()
+                    + " berhasil dipenuhi secara instan!"
+                );
+
+                target.sendMessage(
+                    "§aProgres 3 jam bansos kamu telah dipenuhi oleh admin!"
+                );
+
+                return true;
+            }
+
+            sender.sendMessage("§e===== SISTEM BANTUAN =====");
+            sender.sendMessage("§f/bantuan terima");
+            sender.sendMessage("§f/bantuan timer");
+
+            if (sender.hasPermission("bansos.admin")) {
+                sender.sendMessage(
+                    "§f/bantuan clear <nama pemain>"
+                );
             }
 
             return true;
         });
 
         Bukkit.getScheduler().runTaskTimer(this, () -> {
+
             long now = System.currentTimeMillis();
 
             for (Player player : Bukkit.getOnlinePlayers()) {
+
                 PlayerData pd = getData(player);
 
-                if (now >= pd.lastClaim + COOLDOWN * 1000L
-                        && pd.onlineSeconds < ONLINE_REQUIRED) {
+                boolean cooldownFinished =
+                    now >= pd.lastClaim + cooldown * 1000L;
+
+                if (cooldownFinished &&
+                        pd.onlineSeconds < onlineRequired) {
+
                     pd.onlineSeconds++;
                 }
 
-                if (isReady(pd)) {
+                if (getConfig().getBoolean(
+                        "notification.enabled", true)
+                        && isReady(pd)) {
+
+                    String message = getConfig().getString(
+                        "notification.text",
+                        "&eBANSOS SUDAH DAPAT DI CLAIM CUNG"
+                    );
+
                     player.sendActionBar(
-                        LEGACY.deserialize(
-                            getConfig().getString(
-                                "notification.text",
-                                "&eBANSOS SUDAH DAPAT DI CLAIM CUNG"
-                            )
-                        )
+                        LEGACY.deserialize(message)
                     );
                 }
             }
 
             saveCounter++;
 
-            if (saveCounter >= 60L) {
+            if (saveCounter >= saveInterval) {
                 saveData();
                 saveCounter = 0L;
             }
+
         }, 20L, 20L);
 
-        getLogger().info("Bansos berhasil dimuat.");
+        getLogger().info("Bansos berhasil dimuat!");
     }
 
     @Override
@@ -150,6 +228,7 @@ public final class Bansos extends JavaPlugin implements Listener {
     }
 
     private PlayerData getData(Player player) {
+
         return data.computeIfAbsent(
             player.getUniqueId(),
             uuid -> new PlayerData(0L, 0L)
@@ -157,11 +236,15 @@ public final class Bansos extends JavaPlugin implements Listener {
     }
 
     private boolean isReady(PlayerData pd) {
-        return System.currentTimeMillis() >= pd.lastClaim + COOLDOWN * 1000L
-            && pd.onlineSeconds >= ONLINE_REQUIRED;
+
+        long now = System.currentTimeMillis();
+
+        return now >= pd.lastClaim + cooldown * 1000L
+            && pd.onlineSeconds >= onlineRequired;
     }
 
     private void loadData() {
+
         dataConfig = YamlConfiguration.loadConfiguration(dataFile);
 
         ConfigurationSection section =
@@ -170,38 +253,60 @@ public final class Bansos extends JavaPlugin implements Listener {
         if (section == null) return;
 
         for (String key : section.getKeys(false)) {
+
             try {
+
                 UUID uuid = UUID.fromString(key);
 
-                long online = section.getLong(key + ".online", 0L);
-                long claimed = section.getLong(key + ".last-claim", 0L);
+                long online = dataConfig.getLong(
+                    "players." + key + ".online", 0L
+                );
 
-                data.put(uuid, new PlayerData(online, claimed));
-            } catch (IllegalArgumentException ignored) {
+                long claimed = dataConfig.getLong(
+                    "players." + key + ".last-claim", 0L
+                );
+
+                data.put(
+                    uuid,
+                    new PlayerData(online, claimed)
+                );
+
+            } catch (IllegalArgumentException exception) {
+
                 getLogger().warning("UUID tidak valid: " + key);
             }
         }
     }
 
     private void saveData() {
+
+        if (dataConfig == null || dataFile == null) return;
+
         for (Map.Entry<UUID, PlayerData> entry : data.entrySet()) {
+
             String path = "players." + entry.getKey();
 
-            dataConfig.set(path + ".online", entry.getValue().onlineSeconds);
-            dataConfig.set(path + ".last-claim", entry.getValue().lastClaim);
+            dataConfig.set(
+                path + ".online",
+                entry.getValue().onlineSeconds
+            );
+
+            dataConfig.set(
+                path + ".last-claim",
+                entry.getValue().lastClaim
+            );
         }
 
         try {
-            dataConfig.save(dataFile);
-        } catch (IOException exception) {
-            getLogger().severe("Gagal menyimpan data bansos: "
-                + exception.getMessage());
-        }
-    }
 
-    @EventHandler
-    public void onJoin(PlayerJoinEvent event) {
-        getData(event.getPlayer());
+            dataConfig.save(dataFile);
+
+        } catch (IOException exception) {
+
+            getLogger().severe(
+                "Gagal menyimpan data: " + exception.getMessage()
+            );
+        }
     }
 
     @EventHandler
@@ -210,24 +315,38 @@ public final class Bansos extends JavaPlugin implements Listener {
     }
 
     private void showTimer(Player player) {
+
         PlayerData pd = getData(player);
+
         long now = System.currentTimeMillis();
 
-        if (now < pd.lastClaim + COOLDOWN * 1000L) {
+        long cooldownEnd = pd.lastClaim + cooldown * 1000L;
+
+        if (now < cooldownEnd) {
+
             long remaining =
-                (pd.lastClaim + COOLDOWN * 1000L - now + 999L) / 1000L;
+                (cooldownEnd - now + 999L) / 1000L;
 
             player.sendMessage(
                 "§cCooldown bansos: §e" + formatTime(remaining)
             );
+
             return;
         }
 
-        long remaining = Math.max(0L, ONLINE_REQUIRED - pd.onlineSeconds);
+        long remaining = Math.max(
+            0L,
+            onlineRequired - pd.onlineSeconds
+        );
 
         if (remaining == 0L) {
-            player.sendMessage("§aBansos sudah bisa diklaim!");
+
+            player.sendMessage(
+                "§aBansos sudah bisa diklaim!"
+            );
+
         } else {
+
             player.sendMessage(
                 "§eWaktu online yang dibutuhkan: §f"
                 + formatTime(remaining)
@@ -236,41 +355,59 @@ public final class Bansos extends JavaPlugin implements Listener {
     }
 
     private String formatTime(long seconds) {
-        long hours = seconds / 3600L;
+
+        long days = seconds / 86400L;
+        long hours = (seconds % 86400L) / 3600L;
         long minutes = (seconds % 3600L) / 60L;
         long secs = seconds % 60L;
 
-        return hours + " jam " + minutes + " menit " + secs + " detik";
+        if (days > 0L) {
+            return days + " hari " + hours + " jam "
+                + minutes + " menit";
+        }
+
+        return hours + " jam " + minutes
+            + " menit " + secs + " detik";
     }
 
     private void openMenu(Player player) {
+
         PlayerData pd = getData(player);
 
-        Inventory inv = Bukkit.createInventory(
-            new BansosMenu(null),
-            54,
-            LEGACY.deserialize(
-                getConfig().getString("gui.title", "&8✦ BANSOS PEMAIN ✦")
+        Component title = LEGACY.deserialize(
+            getConfig().getString(
+                "gui.title",
+                "&8✦ BANSOS PEMAIN ✦"
             )
         );
 
-        BansosMenu holder = new BansosMenu(inv);
-        inv = holder.getInventory();
+        BansosMenu holder = new BansosMenu(54, title);
 
-        if (getConfig().getBoolean("gui.filler.enabled", true)) {
+        Inventory inv = holder.getInventory();
+
+        if (getConfig().getBoolean(
+                "gui.filler.enabled", true)) {
+
             Material filler = Material.matchMaterial(
                 getConfig().getString(
-                    "gui.filler.material", "GRAY_STAINED_GLASS_PANE"
+                    "gui.filler.material",
+                    "GRAY_STAINED_GLASS_PANE"
                 )
             );
 
             if (filler != null) {
+
                 ItemStack item = new ItemStack(filler);
+
                 ItemMeta meta = item.getItemMeta();
 
-                meta.displayName(LEGACY.deserialize(
-                    getConfig().getString("gui.filler.name", " ")
-                ));
+                meta.displayName(
+                    LEGACY.deserialize(
+                        getConfig().getString(
+                            "gui.filler.name", " "
+                        )
+                    )
+                );
 
                 item.setItemMeta(meta);
 
@@ -284,25 +421,29 @@ public final class Bansos extends JavaPlugin implements Listener {
             getConfig().getConfigurationSection("rewards");
 
         if (rewards != null) {
+
             for (String key : rewards.getKeys(false)) {
+
                 ConfigurationSection reward =
                     rewards.getConfigurationSection(key);
 
                 if (reward == null) continue;
 
-                ItemStack item = createReward(reward);
+                ItemStack item = createRewardDisplay(reward);
 
                 int slot = reward.getInt("slot", -1);
 
-                if (item != null && slot >= 0 && slot < 54
-                        && (slot < 45 || slot > 49)) {
+                if (item != null &&
+                        slot >= 0 &&
+                        slot < 54 &&
+                        (slot < 45 || slot > 49)) {
+
                     inv.setItem(slot, item);
                 }
             }
         }
 
         setGuiItem(inv, "gui.close-button");
-
         setGuiItem(inv, "gui.claim-button");
 
         if (isReady(pd)) {
@@ -313,6 +454,7 @@ public final class Bansos extends JavaPlugin implements Listener {
     }
 
     private void setGuiItem(Inventory inv, String path) {
+
         ConfigurationSection section =
             getConfig().getConfigurationSection(path);
 
@@ -325,11 +467,14 @@ public final class Bansos extends JavaPlugin implements Listener {
         if (material == null) return;
 
         ItemStack item = new ItemStack(material);
+
         ItemMeta meta = item.getItemMeta();
 
-        meta.displayName(LEGACY.deserialize(
-            section.getString("name", "")
-        ));
+        meta.displayName(
+            LEGACY.deserialize(
+                section.getString("name", "")
+            )
+        );
 
         List<Component> lore = new ArrayList<>();
 
@@ -337,7 +482,10 @@ public final class Bansos extends JavaPlugin implements Listener {
             lore.add(LEGACY.deserialize(line));
         }
 
-        meta.lore(lore);
+        if (!lore.isEmpty()) {
+            meta.lore(lore);
+        }
+
         item.setItemMeta(meta);
 
         int slot = section.getInt("slot", -1);
@@ -347,7 +495,43 @@ public final class Bansos extends JavaPlugin implements Listener {
         }
     }
 
-    private ItemStack createReward(ConfigurationSection section) {
+    private ItemStack createRewardDisplay(
+            ConfigurationSection section) {
+
+        ItemStack item = createReward(section);
+
+        if (item == null) return null;
+
+        int max = item.getMaxStackSize();
+
+        if (item.getAmount() > max) {
+
+            item.setAmount(max);
+
+            ItemMeta meta = item.getItemMeta();
+
+            List<Component> lore = meta.hasLore()
+                ? new ArrayList<>(meta.lore())
+                : new ArrayList<>();
+
+            lore.add(
+                LEGACY.deserialize(
+                    "&eTotal hadiah: "
+                    + section.getInt("amount", 1)
+                )
+            );
+
+            meta.lore(lore);
+
+            item.setItemMeta(meta);
+        }
+
+        return item;
+    }
+
+    private ItemStack createReward(
+            ConfigurationSection section) {
+
         Material material = Material.matchMaterial(
             section.getString("material", "")
         );
@@ -358,22 +542,33 @@ public final class Bansos extends JavaPlugin implements Listener {
 
         if (amount <= 0) return null;
 
-        ItemStack item = new ItemStack(material, amount);
+        ItemStack item = new ItemStack(
+            material,
+            Math.min(amount, material.getMaxStackSize())
+        );
+
         ItemMeta meta = item.getItemMeta();
 
         if (section.contains("name")) {
-            meta.displayName(LEGACY.deserialize(
-                section.getString("name", "")
-            ));
+
+            meta.displayName(
+                LEGACY.deserialize(
+                    section.getString("name", "")
+                )
+            );
         }
 
         ConfigurationSection enchants =
             section.getConfigurationSection("enchantments");
 
         if (enchants != null) {
+
             for (String key : enchants.getKeys(false)) {
+
                 NamespacedKey enchantKey =
-                    NamespacedKey.minecraft(key.toLowerCase(Locale.ROOT));
+                    NamespacedKey.minecraft(
+                        key.toLowerCase(Locale.ROOT)
+                    );
 
                 Enchantment enchant =
                     Enchantment.getByKey(enchantKey);
@@ -383,55 +578,84 @@ public final class Bansos extends JavaPlugin implements Listener {
                 int level = enchants.getInt(key, 1);
 
                 if (meta instanceof EnchantmentStorageMeta bookMeta) {
-                    bookMeta.addStoredEnchant(enchant, level, true);
+
+                    bookMeta.addStoredEnchant(
+                        enchant, level, true
+                    );
+
                 } else {
+
                     meta.addEnchant(enchant, level, true);
                 }
             }
         }
 
         item.setItemMeta(meta);
+
         return item;
     }
 
     private List<ItemStack> getRewards() {
-        List<ItemStack> rewards = new ArrayList<>();
+
+        List<ItemStack> result = new ArrayList<>();
 
         ConfigurationSection section =
             getConfig().getConfigurationSection("rewards");
 
-        if (section == null) return rewards;
+        if (section == null) return result;
 
         for (String key : section.getKeys(false)) {
+
             ConfigurationSection reward =
                 section.getConfigurationSection(key);
 
             if (reward == null) continue;
 
-            ItemStack item = createReward(reward);
+            ItemStack base = createReward(reward);
 
-            if (item != null) rewards.add(item);
+            if (base == null) continue;
+
+            int remaining = reward.getInt("amount", 1);
+            int max = base.getMaxStackSize();
+
+            while (remaining > 0) {
+
+                int amount = Math.min(remaining, max);
+
+                ItemStack stack = base.clone();
+                stack.setAmount(amount);
+
+                result.add(stack);
+
+                remaining -= amount;
+            }
         }
 
-        return rewards;
+        return result;
     }
 
-    private boolean hasEnoughSpace(Player player, List<ItemStack> rewards) {
+    private boolean hasEnoughSpace(
+            Player player,
+            List<ItemStack> rewards) {
+
         PlayerInventory inventory = player.getInventory();
 
         ItemStack[] storage = inventory.getStorageContents();
 
         for (int i = 0; i < storage.length; i++) {
+
             if (storage[i] != null) {
                 storage[i] = storage[i].clone();
             }
         }
 
         Inventory temporary = Bukkit.createInventory(null, 36);
+
         temporary.setContents(storage);
 
         for (ItemStack reward : rewards) {
-            if (temporary.addItem(reward.clone()).size() > 0) {
+
+            if (!temporary.addItem(reward.clone()).isEmpty()) {
                 return false;
             }
         }
@@ -441,6 +665,7 @@ public final class Bansos extends JavaPlugin implements Listener {
 
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
+
         if (!(event.getView().getTopInventory().getHolder()
                 instanceof BansosMenu)) {
             return;
@@ -448,28 +673,42 @@ public final class Bansos extends JavaPlugin implements Listener {
 
         event.setCancelled(true);
 
-        if (!(event.getWhoClicked() instanceof Player player)) return;
+        if (!(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
 
         int slot = event.getRawSlot();
 
-        if (slot == getConfig().getInt("gui.close-button.slot", 45)) {
+        if (slot < 0 || slot >= event.getView()
+                .getTopInventory().getSize()) {
+            return;
+        }
+
+        if (slot == getConfig().getInt(
+                "gui.close-button.slot", 45)) {
+
             player.closeInventory();
             return;
         }
 
-        if (slot != getConfig().getInt("gui.claim-button.slot", 49)) {
+        if (slot != getConfig().getInt(
+                "gui.claim-button.slot", 49)) {
             return;
         }
 
         PlayerData pd = getData(player);
 
         if (!isReady(pd)) {
+
             player.sendMessage(
-                getConfig().getString(
-                    "messages.not-ready",
-                    "&cBansos belum tersedia."
-                ).replace("&", "§")
+                LEGACY.deserialize(
+                    getConfig().getString(
+                        "messages.not-ready",
+                        "&cBansos belum tersedia."
+                    )
+                )
             );
+
             player.closeInventory();
             return;
         }
@@ -477,22 +716,30 @@ public final class Bansos extends JavaPlugin implements Listener {
         List<ItemStack> rewards = getRewards();
 
         if (rewards.isEmpty()) {
-            player.sendMessage("§cHadiah bansos belum dikonfigurasi.");
+
+            player.sendMessage(
+                "§cHadiah bansos belum dikonfigurasi."
+            );
+
             return;
         }
 
         if (!hasEnoughSpace(player, rewards)) {
+
             player.sendMessage(
-                getConfig().getString(
-                    "messages.no-space",
-                    "&cRuang inventaris tidak cukup."
-                ).replace("&", "§")
+                LEGACY.deserialize(
+                    getConfig().getString(
+                        "messages.no-space",
+                        "&cRuang inventaris tidak cukup."
+                    )
+                )
             );
+
             return;
         }
 
         for (ItemStack reward : rewards) {
-            player.getInventory().addItem(reward);
+            player.getInventory().addItem(reward.clone());
         }
 
         pd.onlineSeconds = 0L;
@@ -503,19 +750,23 @@ public final class Bansos extends JavaPlugin implements Listener {
         player.closeInventory();
 
         player.sendMessage(
-            getConfig().getString(
-                "messages.claimed",
-                "&aBansos berhasil diklaim!"
-            ).replace("&", "§")
+            LEGACY.deserialize(
+                getConfig().getString(
+                    "messages.claimed",
+                    "&aBansos berhasil diklaim!"
+                )
+            )
         );
     }
 
     @EventHandler
     public void onInventoryDrag(InventoryDragEvent event) {
+
         if (event.getView().getTopInventory().getHolder()
                 instanceof BansosMenu) {
+
             event.setCancelled(true);
         }
     }
-        }
-          
+                }
+                     
