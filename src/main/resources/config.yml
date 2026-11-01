@@ -1,0 +1,115 @@
+
+settings:
+  online-required-seconds: 10800
+  cooldown-seconds: 259200
+  save-interval-seconds: 60
+
+notification:
+  enabled: true
+  text: "&eBANSOS SUDAH DAPAT DI CLAIM CUNG"
+
+gui:
+  title: "&8✦ BANSOS PEMAIN ✦"
+  rows: 6
+
+  filler:
+    enabled: true
+    material: GRAY_STAINED_GLASS_PANE
+    name: " "
+
+  claim-button:
+    slot: 49
+    material: EMERALD_BLOCK
+    name: "&a&lKLAIM BANSOS"
+    lore:
+      - "&7Tekan untuk mengambil semua hadiah"
+      - "&ePastikan inventarismu memiliki ruang!"
+
+  close-button:
+    slot: 45
+    material: BARRIER
+    name: "&cTUTUP MENU"
+
+rewards:
+  helmet:
+    slot: 10
+    material: DIAMOND_HELMET
+    amount: 1
+    name: "&bDiamond Helmet"
+    enchantments:
+      PROTECTION: 3
+      UNBREAKING: 3
+
+  chestplate:
+    slot: 11
+    material: DIAMOND_CHESTPLATE
+    amount: 1
+    name: "&bDiamond Chestplate"
+    enchantments:
+      PROTECTION: 3
+      UNBREAKING: 3
+
+  leggings:
+    slot: 12
+    material: DIAMOND_LEGGINGS
+    amount: 1
+    name: "&bDiamond Leggings"
+    enchantments:
+      PROTECTION: 3
+      UNBREAKING: 3
+
+  boots:
+    slot: 13
+    material: DIAMOND_BOOTS
+    amount: 1
+    name: "&bDiamond Boots"
+    enchantments:
+      PROTECTION: 3
+      UNBREAKING: 3
+
+  mending_book_1:
+    slot: 19
+    material: ENCHANTED_BOOK
+    amount: 1
+    name: "&dEnchanted Book"
+    enchantments:
+      MENDING: 1
+
+  mending_book_2:
+    slot: 20
+    material: ENCHANTED_BOOK
+    amount: 1
+    name: "&dEnchanted Book"
+    enchantments:
+      MENDING: 1
+
+  golden_apple:
+    slot: 21
+    material: GOLDEN_APPLE
+    amount: 16
+    name: "&6Golden Apple"
+
+  experience_bottle:
+    slot: 22
+    material: EXPERIENCE_BOTTLE
+    amount: 128
+    name: "&aExperience Bottle"
+
+  golden_carrot:
+    slot: 23
+    material: GOLDEN_CARROT
+    amount: 32
+    name: "&6Golden Carrot"
+
+  diamond:
+    slot: 24
+    material: DIAMOND
+    amount: 12
+    name: "&bDiamond"
+
+messages:
+  no-space: "&cBANSOS DITOLAK! Ruang inventaris tidak cukup."
+  not-ready: "&cBansos belum tersedia. Cek /timer bansos."
+  claimed: "&aBerhasil mengklaim seluruh hadiah bansos!"
+  already-claimed: "&cKamu sudah mengklaim bansos. Tunggu cooldown."
+  
