@@ -109,7 +109,7 @@ rewards:
 
 messages:
   no-space: "&cBANSOS DITOLAK! Ruang inventaris tidak cukup."
-  not-ready: "&cBansos belum tersedia. Cek /timer bansos."
+  not-ready: "&cBansos belum tersedia. Cek /bantuan timer."
   claimed: "&aBerhasil mengklaim seluruh hadiah bansos!"
   already-claimed: "&cKamu sudah mengklaim bansos. Tunggu cooldown."
   
