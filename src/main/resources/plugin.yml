@@ -1,4 +1,3 @@
-
 name: Bansos
 version: '1.0.0'
 main: id.server.bansos.Bansos
@@ -6,16 +5,11 @@ api-version: '1.21'
 description: Lightweight player welfare reward system.
 
 commands:
-  bansos:
-    description: Membuka menu dan mengklaim bansos
-    usage: /bansos <claim>
-
-  timer:
-    description: Memeriksa waktu bansos
-    usage: /timer bansos
+  bantuan:
+    description: Sistem bantuan pemain
+    usage: /bantuan <terima|timer|clear>
 
 permissions:
   bansos.admin:
-    description: Mengelola sistem bansos
+    description: Mengelola sistem bantuan
     default: op
-    
