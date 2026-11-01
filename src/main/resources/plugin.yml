@@ -13,4 +13,3 @@ permissions:
   bansos.admin:
     description: Mengelola sistem bantuan
     default: op
-k
